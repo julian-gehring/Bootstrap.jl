@@ -188,18 +188,22 @@ _zeros_tuple(::Type{T}, m::Int) where T <: Tuple =
 """
 bootstrap(statistic, data, BasicSampling())
 """
-function bootstrap(statistic::Function, data, sampling::BasicSampling)
-    t0 = tx(statistic(data))
+function bootstrap(statistic::Function, data::Tuple, sampling::BasicSampling)
+    t0 = tx(statistic(data...))
     m = nrun(sampling)
     t1 = zeros_tuple(t0, m)
-    data1 = copy(data)
+    data1 = copy.(data)
     for i in 1:m
-        draw!(data, data1)
-        for (j, t) in enumerate(tx(statistic(data1)))
+        draw!.(data, data1)
+        for (j, t) in enumerate(tx(statistic(data1...)))
             t1[j][i] = t
         end
     end
     return NonParametricBootstrapSample(t0, t1, statistic, data, sampling)
+end
+
+function bootstrap(statistic::Function, data, sampling::BasicSampling)
+    bootstrap(statistic, (data,), sampling)
 end
 
 

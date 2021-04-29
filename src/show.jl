@@ -30,6 +30,9 @@ function data_summary(x)
     return s
 end
 
+# TEMP hack to get `Base.show` to work on a `Tuple`
+data_summary(x::Tuple) = ""
+
 
 function estimate_summary(bs::BootstrapSample)
     n = nvar(bs)
