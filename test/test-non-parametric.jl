@@ -227,9 +227,7 @@ const citya = Matrix(city)
         # Collect the samples
         samples = zeros(eltype(r), (nobs, n))
         for i in 1:n
-            # For some reason the samples are only filled in if we have
-            # an explicit assignment back into the matrix.
-            samples[:, i] = draw!(s.cache, r, samples[:, i])
+            draw!(s.cache, r, view(samples, :, i))
         end
 
         # Add some checks to ensure that our within sample variation is greater than our

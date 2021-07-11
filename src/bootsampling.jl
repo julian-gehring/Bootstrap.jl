@@ -32,9 +32,12 @@ BasicSampling(1000)
 ```
 
 """
-struct BasicSampling <: BootstrapSampling
+struct BasicSampling{R<:AbstractRNG} <: BootstrapSampling
+    rng::R
     nrun::Int
 end
+
+BasicSampling(nrun::Int) = BasicSampling(Random.GLOBAL_RNG, nrun)
 
 """
 Antithetic Sampling
@@ -44,10 +47,12 @@ AntitheticSampling(1000)
 ```
 
 """
-struct AntitheticSampling <: BootstrapSampling
+struct AntitheticSampling{R<:AbstractRNG} <: BootstrapSampling
+    rng::R
     nrun::Int
 end
 
+AntitheticSampling(nrun::Int) = AntitheticSampling(Random.GLOBAL_RNG, nrun)
 
 """
 Balanced Sampling
@@ -57,10 +62,12 @@ BalancedSampling(1000)
 ```
 
 """
-struct BalancedSampling <: BootstrapSampling
+struct BalancedSampling{R<:AbstractRNG} <: BootstrapSampling
+    rng::R
     nrun::Int
 end
 
+BalancedSampling(nrun::Int) = BalancedSampling(Random.GLOBAL_RNG, nrun)
 
 """
 Residual Sampling
@@ -70,10 +77,12 @@ ResidualSampling(1000)
 ```
 
 """
-struct ResidualSampling <: BootstrapSampling
+struct ResidualSampling{R<:AbstractRNG} <: BootstrapSampling
+    rng::R
     nrun::Int
 end
 
+ResidualSampling(nrun::Int) = ResidualSampling(Random.GLOBAL_RNG, nrun)
 
 """
 Wild Sampling
@@ -84,11 +93,13 @@ WildSampling(1000, mammen)
 ```
 
 """
-struct WildSampling{F} <: BootstrapSampling
+struct WildSampling{R<:AbstractRNG,F} <: BootstrapSampling
+    rng::R
     nrun::Int
     noise::F
 end
 
+WildSampling(nrun::Int, noise) = WildSampling(Random.GLOBAL_RNG, nrun, noise)
 
 """
 Exact Sampling
@@ -115,12 +126,15 @@ maximumEntropySampling(100, MaximumEntropyCache())
 NOTE: Implementation based off [pymeboot](https://github.com/kirajcg/pymeboot) as the original
 [R package](https://cran.r-project.org/web/packages/meboot/index.html) is GPL licensed.
 """
-struct MaximumEntropySampling{T} <: BootstrapSampling
+struct MaximumEntropySampling{R,T} <: BootstrapSampling
+    rng::R
     nrun::Int
     cache::MaximumEntropyCache{T}
 end
 
-MaximumEntropySampling(nrun) = MaximumEntropySampling(nrun, MaximumEntropyCache())
+MaximumEntropySampling(nrun::Int) = MaximumEntropySampling(Random.GLOBAL_RNG, nrun)
+MaximumEntropySampling(rng, nrun::Int) =
+    MaximumEntropySampling(rng, nrun, MaximumEntropyCache())
 
 abstract type BootstrapSample end
 
@@ -186,15 +200,22 @@ _zeros_tuple(::Type{T}, m::Int) where T <: Tuple =
     (zeros(Base.tuple_type_head(T), m), _zeros_tuple(Base.tuple_type_tail(T), m)...)
 
 """
-bootstrap(statistic, data, BasicSampling())
+    bootstrap(statistic, data[, model], sampling)
+
+Bootstrap the `statistic` of dataset `data` using the resampling method `sampling`.
+
+If a `model` is specified, a parametric bootstrap is performed.
 """
-function bootstrap(statistic::Function, data, sampling::BasicSampling)
+function bootstrap end
+
+function bootstrap(statistic, data, sampling::BasicSampling)
     t0 = tx(statistic(data))
     m = nrun(sampling)
     t1 = zeros_tuple(t0, m)
     data1 = copy(data)
+    rng = sampling.rng
     for i in 1:m
-        draw!(data, data1)
+        draw!(rng, data, data1)
         for (j, t) in enumerate(tx(statistic(data1)))
             t1[j][i] = t
         end
@@ -203,10 +224,7 @@ function bootstrap(statistic::Function, data, sampling::BasicSampling)
 end
 
 
-"""
-bootstrap(statistic, data, AntitheticSampling)
-"""
-function bootstrap(statistic::Function, data::AbstractVector, sampling::AntitheticSampling)
+function bootstrap(statistic, data::AbstractVector, sampling::AntitheticSampling)
     t0 = tx(statistic(data))
     m = nrun(sampling)
     n = nobs(data)
@@ -216,9 +234,10 @@ function bootstrap(statistic::Function, data::AbstractVector, sampling::Antithet
     data1 = copy(data)
     data0 = copy(data)
     sort!(data0)
+    rng = sampling.rng
     for i in 1:m
         if isodd(i)
-            sample!(idx, idx1)
+            sample!(rng, idx, idx1)
         else
             idx1 = n .- idx1 .+ 1
         end
@@ -230,19 +249,14 @@ function bootstrap(statistic::Function, data::AbstractVector, sampling::Antithet
     return NonParametricBootstrapSample(t0, t1, statistic, data, sampling)
 end
 
-
-
-"""
-bootstrap(statistic, data, sampling)
-"""
-function bootstrap(statistic::Function, data, sampling::BalancedSampling)
+function bootstrap(statistic, data, sampling::BalancedSampling)
     n = nobs(data)
     m = nrun(sampling)
     t0 = tx(statistic(data))
     t1 = zeros_tuple(t0, m)
     idx = repeat([1:n;], m)
     ridx = zeros(Int, n, m)
-    sample!(idx, ridx, replace = false)
+    sample!(sampling.rng, idx, ridx, replace = false)
     for i in 1:m
         for (j, t) in enumerate(tx(statistic(pick(data, ridx[:,i]))))
             t1[j][i] = t
@@ -284,10 +298,7 @@ length(itr::ExactIterator) = binomial(length(itr.a) + itr.k - 1, itr.k)
 size(itr::ExactIterator) = (itr.k,)
 
 
-"""
-bootstrap(statistic, data, sampling)
-"""
-function bootstrap(statistic::Function, data, sampling::ExactSampling)
+function bootstrap(statistic, data, sampling::ExactSampling)
     n = nobs(data)
     m = nrun_exact(n)
     t0 = tx(statistic(data))
@@ -301,18 +312,17 @@ function bootstrap(statistic::Function, data, sampling::ExactSampling)
     return NonParametricBootstrapSample(t0, t1, statistic, data, sampling)
 end
 
-"""
-bootstrap(statistic, data, MaximumEntropySampling)
-"""
-function bootstrap(statistic::Function, data, sampling::MaximumEntropySampling)
-    init!(sampling.cache, data)
+function bootstrap(statistic, data, sampling::MaximumEntropySampling)
+    cache = sampling.cache
+    init!(cache, data)
 
     t0 = tx(statistic(data))
     m = nrun(sampling)
     t1 = zeros_tuple(t0, m)
     data1 = copy(data)
+    rng = sampling.rng
     for i in 1:m
-        draw!(sampling.cache, data, data1)
+        draw!(rng, cache, data, data1)
         for (j, t) in enumerate(tx(statistic(data1)))
             t1[j][i] = t
         end
@@ -320,17 +330,15 @@ function bootstrap(statistic::Function, data, sampling::MaximumEntropySampling)
     return NonParametricBootstrapSample(t0, t1, statistic, data, sampling)
 end
 
-"""
-bootstrap(statistic, data, model, sampling)
-"""
-function bootstrap(statistic::Function, data, model::SimpleModel, sampling::BootstrapSampling)
+function bootstrap(statistic, data, model::SimpleModel, sampling::BootstrapSampling)
     f0 = fit(model.class, data, model.args...; model.kwargs...)
     t0 = tx(statistic(data))
     m = nrun(sampling)
     t1 = zeros_tuple(t0, m)
     data1 = copy(data)
+    rng = sampling.rng
     for i in 1:m
-        draw!(f0, data1)
+        draw!(rng, f0, data1)
         for (j, t) in enumerate(tx(statistic(data1)))
             t1[j][i] = t
         end
@@ -349,21 +357,17 @@ end
 
 StatsModels.modelcols(t::ResidualTerm, data) =
     throw(ArgumentError("ResidualTerm: don't know how to generate model columns for $(typeof(t.sampling))"))
-StatsModels.modelcols(t::ResidualTerm{ResidualSampling}, data) =
-    modelcols(t.t, data) + sample!(t.r0, t.r1)
+StatsModels.modelcols(t::ResidualTerm{<:ResidualSampling}, data) =
+    modelcols(t.t, data) + sample!(t.sampling.rng, t.r0, t.r1)
 StatsModels.modelcols(t::ResidualTerm{<:WildSampling}, data) =
-    modelcols(t.t, data) + t.sampling.noise(t.r0)
+    modelcols(t.t, data) + t.sampling.noise(t.sampling.rng, t.r0)
 
 # we only ever create one of these terms after the model has been fit once so we don't
 # need to create a new schema for it every time...
 StatsModels.needs_schema(t::ResidualTerm) = false
 StatsModels.termvars(t::ResidualTerm) = StatsModels.termvars(t.t)
 
-"""
-bootstrap(statistic, data, model, formula, sampling)
-bootstrap(statistic, data, model, formula, Wildsampling(nrun, noise))
-"""
-function bootstrap(statistic::Function, data::AbstractDataFrame, model::FormulaModel,
+function bootstrap(statistic, data::AbstractDataFrame, model::FormulaModel,
                    sampling::BootstrapSampling)
     class = model.class
     formula = apply_schema(model.formula, schema(model.formula, data), model.class)

@@ -1,12 +1,12 @@
 ## rademacher
-rademacher(x) = x .* sign.(randn(nobs(x)))
+rademacher(rng::AbstractRNG, x) = x .* sign.(randn(rng, nobs(x)))
 
 const _mammen_dist = Binomial(1, (sqrt(5) + 1) / (2 * sqrt(5)))
 const _mammen_val1 = -(sqrt(5) - 1) / 2
 const _mammen_val2 = (sqrt(5) + 1) / 2
 
-function mammen(x)
-    r = rand(_mammen_dist, nobs(x))
+function mammen(rng::AbstractRNG, x)
+    r = rand(rng, _mammen_dist, nobs(x))
     return ifelse.(r .== 1, _mammen_val1, _mammen_val2)
 end
 

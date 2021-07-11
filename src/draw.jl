@@ -1,19 +1,21 @@
 ## draw: unify rand, sample
 
-draw!(x::Distribution, o) = rand!(x, o)
+draw!(x, o) = draw!(Random.GLOBAL_RNG, x, o)
 
-draw!(x::AbstractVector, o::AbstractVector) = sample!(x, o)
+draw!(rng::AbstractRNG, x::Distribution, o) = rand!(rng, x, o)
 
-function draw!(x::AbstractMatrix, o::AbstractMatrix)
-    idx = sample(1:nobs(x), nobs(o))
+draw!(rng::AbstractRNG, x::AbstractVector, o::AbstractVector) = sample!(rng, x, o)
+
+function draw!(rng::AbstractRNG, x::AbstractMatrix, o::AbstractMatrix)
+    idx = sample(rng, 1:nobs(x), nobs(o))
     for (to, from) in enumerate(idx)
         o[to,:] = x[from,:]
     end
     return o
 end
 
-function draw!(x::AbstractDataFrame, o::AbstractDataFrame)
-    idx = sample(1:nobs(x), nobs(o))
+function draw!(rng::AbstractRNG, x::AbstractDataFrame, o::AbstractDataFrame)
+    idx = sample(rng, 1:nobs(x), nobs(o))
     for column in names(x)
         o[!,column] = x[idx,column]
     end
@@ -133,9 +135,12 @@ function med!(c::MaximumEntropyCache{T}) where T
     c.m[end] = 0.25 * c.vals[end - 1] + 0.75 * c.vals[end]
 end
 
-function draw!(cache::MaximumEntropyCache, x::T, o::T) where T <: AbstractArray
+draw!(cache::MaximumEntropyCache, x, o) = draw!(Random.GLOBAL_RNG, cache, x, o)
+
+function draw!(rng::AbstractRNG, cache::MaximumEntropyCache, x::AbstractArray,
+               o::AbstractArray)
     # Generate random numbers from the [0, 1] uniform interval.
-    sort!(rand!(cache.U))
+    sort!(rand!(rng, cache.U))
 
     # Compute sample quantiles of the ME density at those points and sort them.
     for k in 1:cache.n
