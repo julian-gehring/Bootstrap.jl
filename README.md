@@ -80,6 +80,8 @@ estimated bias and standard error of our statistic.
   stderror(bs1)
 ```
 
+*Note*: do not confuse function ```stderror``` provided by the`Bootstrap` package with function stderr provided by Julia base.
+
 Furthermore, we can estimate confidence intervals (CIs) for our statistic of
 interest, based on the bootstrapped samples.
 
